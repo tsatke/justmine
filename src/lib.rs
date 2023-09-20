@@ -22,17 +22,13 @@ pub fn setup(
     }
 
     let start_x = 0;
-    let start_y = 64;
-    for i in 0..15 {
-        overworld_layer
-            .chunk
-            .set_block([start_x + i, start_y, 0], BlockState::GRASS_BLOCK);
-        overworld_layer
-            .chunk
-            .set_block([start_x + i, start_y, -1], BlockState::GRASS_BLOCK);
-        overworld_layer
-            .chunk
-            .set_block([start_x + i, start_y, 1], BlockState::GRASS_BLOCK);
+    let start_z = 0;
+    for x in -5..5 {
+        for z in -5..5 {
+            overworld_layer
+                .chunk
+                .set_block([start_x + x, 64, start_z + z], BlockState::GRASS_BLOCK);
+        }
     }
 
     commands.spawn(overworld_layer);
