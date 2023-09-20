@@ -10,7 +10,6 @@ pub fn fell_out_of_world(
 ) {
     for (entity, mut client, pos) in &mut clients {
         if pos.y < 0.0 {
-            commands.entity(entity).log_components();
             commands.entity(entity).insert(Dead);
             client.kill("What are you doing down there?");
         }

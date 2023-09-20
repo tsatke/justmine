@@ -24,14 +24,14 @@ pub fn remove_block(
 }
 
 pub fn place_block(
-    mut clients: Query<(&GameMode, &HeldItem, &mut Inventory)>,
+    mut clients: Query<(&GameMode, &HeldItem, &Look, &mut Inventory)>,
     mut layers: Query<&mut ChunkLayer>,
     mut events: EventReader<InteractBlockEvent>,
 ) {
     let mut layer = layers.single_mut();
 
     for event in events.iter() {
-        let (game_mode, held_item, mut inventory) = match clients.get_mut(event.client) {
+        let (game_mode, held_item, look, mut inventory) = match clients.get_mut(event.client) {
             Ok(v) => v,
             Err(_) => continue,
         };
@@ -66,6 +66,50 @@ pub fn place_block(
                     Direction::West | Direction::East => PropValue::X,
                 },
             );
+        }
+
+        if block.props().contains(&PropName::Facing) {
+            // we're placing a door, fence gate, or similar block
+            let yaw = if look.yaw > 180_f32 {
+                look.yaw - 360_f32
+            } else if look.yaw < -180_f32 {
+                look.yaw + 360_f32
+            } else {
+                look.yaw
+            };
+            let facing = match look {
+                _ if (-135_f32..-45_f32).contains(&yaw) => PropValue::East,
+                _ if (-45_f32..45_f32).contains(&yaw) => PropValue::South,
+                _ if (45_f32..135_f32).contains(&yaw) => PropValue::West,
+                _ if (135_f32..=180_f32).contains(&yaw) | (-180_f32..-135_f32).contains(&yaw) => {
+                    PropValue::North
+                }
+                _ => panic!("invalid look angle: {}", yaw),
+            };
+            state = state.set(PropName::Facing, facing);
+
+            if block.props().contains(&PropName::Half) {
+                // we're placing a door
+                state = state.set(PropName::Half, PropValue::Lower);
+                let (v, invert) = match facing {
+                    PropValue::South => (event.cursor_pos.x, false),
+                    PropValue::North => (event.cursor_pos.x, true),
+                    PropValue::East => (event.cursor_pos.z, true),
+                    PropValue::West => (event.cursor_pos.z, false),
+                    _ => unreachable!(),
+                };
+                let hinge_right = if invert { v > 0.5 } else { v < 0.5 };
+                let hinge = if hinge_right {
+                    PropValue::Right
+                } else {
+                    PropValue::Left
+                };
+                // FIXME: if hinge left, but left of the door is another door, the hinge should be on the right
+                state = state.set(PropName::Hinge, hinge);
+
+                let upper = state.clone().set(PropName::Half, PropValue::Upper);
+                layer.set_block(target_position.get_in_direction(Direction::Up), upper);
+            }
         }
         layer.set_block(target_position, state);
     }
