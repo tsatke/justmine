@@ -105,8 +105,24 @@ pub fn place_block(
                 } else {
                     PropValue::Left
                 };
-                // FIXME: if hinge left, but left of the door is another door, the hinge should be on the right
-                state = state.set(PropName::Hinge, hinge);
+
+                if !hinge_right {
+                    if let Some(block) =
+                        layer.block(target_position.get_in_direction(match facing {
+                            PropValue::South => Direction::East,
+                            PropValue::North => Direction::West,
+                            PropValue::East => Direction::North,
+                            PropValue::West => Direction::South,
+                            _ => unreachable!(),
+                        }))
+                    {
+                        if is_door(block.state) {
+                            state = state.set(PropName::Hinge, PropValue::Right);
+                        }
+                    }
+                } else {
+                    state = state.set(PropName::Hinge, hinge);
+                }
 
                 let upper = state.clone().set(PropName::Half, PropValue::Upper);
                 layer.set_block(target_position.get_in_direction(Direction::Up), upper);
@@ -114,4 +130,8 @@ pub fn place_block(
         }
         layer.set_block(target_position, state);
     }
+}
+
+fn is_door(block: BlockState) -> bool {
+    block.to_kind().to_str().contains("door")
 }
