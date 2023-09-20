@@ -1,8 +1,6 @@
 use bevy_log::{Level, LogPlugin};
-use justmine::{digging, fell_out_of_world, init_clients, respawn, setup};
-use valence::app::{App, PluginGroup, Startup, Update};
-use valence::client::despawn_disconnected_clients;
-use valence::DefaultPlugins;
+use justmine::{accept_connection, fell_out_of_world, place_block, remove_block, respawn, setup};
+use valence::prelude::*;
 
 fn main() {
     App::new()
@@ -14,9 +12,10 @@ fn main() {
         .add_systems(
             Update,
             (
-                init_clients,
+                accept_connection,
                 fell_out_of_world,
-                digging,
+                remove_block,
+                place_block,
                 respawn,
                 despawn_disconnected_clients,
             ),
