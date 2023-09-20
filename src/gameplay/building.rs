@@ -31,33 +31,42 @@ pub fn place_block(
     let mut layer = layers.single_mut();
 
     for event in events.iter() {
-        if let Ok((game_mode, held_item, mut inventory)) = clients.get_mut(event.client) {
-            let slot = held_item.slot();
-            let stack = inventory.slot(slot);
-            if stack.is_empty() {
-                // client is not holding anything, our work is done for this event
-                continue;
-            }
-
-            let target_position = event.position.get_in_direction(event.face);
-
-            if let Some(block) = BlockKind::from_item_kind(stack.item) {
-                // don't decrement the stack amount in creative mode
-                if game_mode == &GameMode::Survival {
-                    let count = stack.count;
-                    inventory.set_slot_amount(slot, count - 1);
-                }
-
-                let state = BlockState::from_kind(block).set(
-                    PropName::Axis,
-                    match event.face {
-                        Direction::Down | Direction::Up => PropValue::Y,
-                        Direction::North | Direction::South => PropValue::Z,
-                        Direction::West | Direction::East => PropValue::X,
-                    },
-                );
-                layer.set_block(target_position, state);
-            }
+        let (game_mode, held_item, mut inventory) = match clients.get_mut(event.client) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let slot = held_item.slot();
+        let stack = inventory.slot(slot);
+        if stack.is_empty() {
+            // client is not holding anything, our work is done for this event
+            continue;
         }
+
+        let target_position = event.position.get_in_direction(event.face);
+
+        let block = match BlockKind::from_item_kind(stack.item) {
+            Some(block) => block,
+            None => continue,
+        };
+
+        // don't decrement the stack amount in creative mode
+        if game_mode == &GameMode::Survival {
+            let count = stack.count;
+            inventory.set_slot_amount(slot, count - 1);
+        }
+
+        let mut state = BlockState::from_kind(block);
+        if block.props().contains(&PropName::Axis) {
+            // respect placement orientation if the block has an axis property
+            state = state.set(
+                PropName::Axis,
+                match event.face {
+                    Direction::Down | Direction::Up => PropValue::Y,
+                    Direction::North | Direction::South => PropValue::Z,
+                    Direction::West | Direction::East => PropValue::X,
+                },
+            );
+        }
+        layer.set_block(target_position, state);
     }
 }
