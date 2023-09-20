@@ -1,0 +1,12 @@
+[package]
+name = "justmine"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy_ecs = "0.11.2"
+bevy_log = "0.11.2"
+log = { version = "0.4.20", features = ["std"] }
+valence = { git = "https://github.com/valence-rs/valence" }
