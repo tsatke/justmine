@@ -70,12 +70,13 @@ pub fn place_block(
 
         if block.props().contains(&PropName::Facing) {
             // we're placing a door, fence gate, or similar block
-            let yaw = if look.yaw > 180_f32 {
-                look.yaw - 360_f32
-            } else if look.yaw < -180_f32 {
-                look.yaw + 360_f32
+            let yaw = look.yaw % 360_f32;
+            let yaw = if yaw > 180_f32 {
+                yaw - 360_f32
+            } else if yaw < -180_f32 {
+                yaw + 360_f32
             } else {
-                look.yaw
+                yaw
             };
             let facing = match look {
                 _ if (-135_f32..-45_f32).contains(&yaw) => PropValue::East,
