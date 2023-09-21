@@ -126,6 +126,7 @@ pub fn place_block(
                 }
 
                 let upper = state.set(PropName::Half, PropValue::Upper);
+                // FIXME:: check that that block is air, otherwise we can't place it
                 layer.set_block(target_position.get_in_direction(Direction::Up), upper);
             }
         }
