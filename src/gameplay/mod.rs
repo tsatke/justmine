@@ -35,7 +35,7 @@ pub fn respawn(
     layers: Query<Entity, (With<ChunkLayer>, With<EntityLayer>)>,
 ) {
     let layer = layers.single();
-    for event in events.iter() {
+    events.iter().for_each(|event| {
         if let Ok((
             entity,
             mut layer_id,
@@ -50,5 +50,5 @@ pub fn respawn(
             visible_entity_layers.0.insert(layer);
             respawn_pos.pos = BlockPos::new(0, 65, 0);
         }
-    }
+    });
 }

@@ -8,10 +8,10 @@ pub fn fell_out_of_world(
     mut commands: Commands,
     mut clients: Query<(Entity, &mut Client, &Position), Without<Dead>>,
 ) {
-    for (entity, mut client, pos) in &mut clients {
+    clients.for_each_mut(|(entity, mut client, pos)| {
         if pos.y < 0.0 {
             commands.entity(entity).insert(Dead);
             client.kill("What are you doing down there?");
         }
-    }
+    });
 }

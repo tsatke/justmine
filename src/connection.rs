@@ -27,7 +27,7 @@ pub fn accept_connection(
     mut clients: Query<InitClientQuery, Added<Client>>,
     layers: Query<Entity, (With<ChunkLayer>, With<EntityLayer>)>,
 ) {
-    for mut client in &mut clients {
+    clients.for_each_mut(|mut client| {
         info!("new client connected");
 
         let layer = layers.single();
@@ -46,5 +46,5 @@ pub fn accept_connection(
         });
 
         client.client.send_chat_message("Welcome to the server!");
-    }
+    })
 }

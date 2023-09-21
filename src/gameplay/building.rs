@@ -10,9 +10,9 @@ pub fn remove_block(
 ) {
     let mut layer = layers.single_mut();
 
-    for event in events.iter() {
+    events.iter().for_each(|event| {
         let Ok(game_mode) = clients.get(event.client) else {
-            continue;
+            return;
         };
 
         if (*game_mode == GameMode::Creative && event.state == DiggingState::Start)
@@ -20,7 +20,7 @@ pub fn remove_block(
         {
             layer.set_block(event.position, BlockState::AIR);
         }
-    }
+    });
 }
 
 pub fn place_block(
@@ -30,23 +30,24 @@ pub fn place_block(
 ) {
     let mut layer = layers.single_mut();
 
-    for event in events.iter() {
+    events.iter().for_each(|event| {
         let (game_mode, held_item, look, mut inventory) = match clients.get_mut(event.client) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(_) => return,
         };
+
         let slot = held_item.slot();
         let stack = inventory.slot(slot);
         if stack.is_empty() {
             // client is not holding anything, our work is done for this event
-            continue;
+            return;
         }
 
         let target_position = event.position.get_in_direction(event.face);
 
         let block = match BlockKind::from_item_kind(stack.item) {
             Some(block) => block,
-            None => continue,
+            None => return,
         };
 
         // don't decrement the stack amount in creative mode
@@ -124,12 +125,12 @@ pub fn place_block(
                     state = state.set(PropName::Hinge, hinge);
                 }
 
-                let upper = state.clone().set(PropName::Half, PropValue::Upper);
+                let upper = state.set(PropName::Half, PropValue::Upper);
                 layer.set_block(target_position.get_in_direction(Direction::Up), upper);
             }
         }
         layer.set_block(target_position, state);
-    }
+    });
 }
 
 fn is_door(block: BlockState) -> bool {
