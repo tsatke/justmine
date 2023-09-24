@@ -141,71 +141,201 @@ fn is_door(block: BlockState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::{eval_script, TestableEnvironment};
+    use std::ops::{Deref, DerefMut};
     use valence::testing::ScenarioSingleClient;
 
-    #[test]
-    fn test_place_block_simple() {
-        const INVENTORY_SLOT: u16 = 36;
+    const INVENTORY_SLOT: u16 = 36;
 
-        let mut scenario = ScenarioSingleClient::new();
-        scenario.app.add_systems(Update, place_block);
-        scenario.app.update();
+    struct BlockPlacementScenario {
+        scenario: ScenarioSingleClient,
+    }
+
+    impl BlockPlacementScenario {
+        fn new() -> Self {
+            let mut scenario = ScenarioSingleClient::new();
+            scenario.app.add_systems(Update, place_block);
+            scenario.app.update();
+
+            {
+                // set up chunk layer
+                let mut entity_mut = scenario.app.world.entity_mut(scenario.layer);
+                let mut layer = entity_mut.get_mut::<ChunkLayer>().unwrap();
+                // insert unloadedchunks between -1..=1 and -1..=1
+                for x in -1..=1 {
+                    for z in -1..=1 {
+                        layer.insert_chunk([x, z], UnloadedChunk::new());
+                    }
+                }
+                layer.set_block(
+                    BlockPos::new(0, 0, 0),
+                    BlockState::from_kind(BlockKind::GrassBlock),
+                );
+            }
+
+            scenario.app.update();
+
+            Self { scenario }
+        }
+
+        fn layer(&self) -> &ChunkLayer {
+            let layer_entity = self.world.entity(self.scenario.layer);
+            layer_entity.get::<ChunkLayer>().unwrap()
+        }
+
+        fn client_entity(&self) -> Entity {
+            self.scenario.client
+        }
+    }
+
+    impl Deref for BlockPlacementScenario {
+        type Target = App;
+
+        fn deref(&self) -> &Self::Target {
+            &self.scenario.app
+        }
+    }
+
+    impl DerefMut for BlockPlacementScenario {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.scenario.app
+        }
+    }
+
+    #[test]
+    fn test_assumptions() {
+        /*
+        Since valence is not stable yet, in this test, we test our assumptions, such as
+        that the default game mode is survival.
+
+        If this test fails, that means that something in valence changed, and we probably
+        need to adapt our tests.
+         */
+
+        assert_eq!(GameMode::Survival, GameMode::default());
+    }
+
+    #[test]
+    fn test_place_block_with_axis() {
+        let mut scenario = BlockPlacementScenario::new();
+        let client = scenario.client_entity();
 
         {
             // set up entity
-            let mut entity_mut = scenario.app.world.entity_mut(scenario.client);
-            *entity_mut.get_mut::<GameMode>().unwrap() = GameMode::Survival;
-            entity_mut.get_mut::<HeldItem>().unwrap().set_slot(36);
-            entity_mut
-                .get_mut::<Inventory>()
-                .unwrap()
-                .set_slot(INVENTORY_SLOT, ItemStack::new(ItemKind::OakPlanks, 2, None));
+            let mut q = scenario.world.query::<(&mut HeldItem, &mut Inventory)>();
+            let (mut held_item, mut inventory) = q.get_single_mut(&mut scenario.world).unwrap();
+            held_item.set_slot(INVENTORY_SLOT);
+            inventory.set_slot(INVENTORY_SLOT, ItemStack::new(ItemKind::OakLog, 6, None));
+        }
+
+        for direction in [
+            Direction::Up,
+            Direction::Down,
+            Direction::South,
+            Direction::North,
+            Direction::East,
+            Direction::West,
+        ] {
+            scenario.world.send_event(InteractBlockEvent {
+                client,
+                hand: Hand::Main,
+                position: BlockPos::new(0, 0, 0),
+                face: direction,
+                cursor_pos: match direction {
+                    Direction::Down => Vec3::new(0.5, 0.0, 0.5),
+                    Direction::Up => Vec3::new(0.5, 1.0, 0.5),
+                    Direction::North => Vec3::new(0.5, 0.5, 0.0),
+                    Direction::South => Vec3::new(0.5, 0.5, 1.0),
+                    Direction::West => Vec3::new(0.0, 0.5, 0.5),
+                    Direction::East => Vec3::new(1.0, 0.5, 0.5),
+                },
+                head_inside_block: false,
+                sequence: 0,
+            });
+            scenario.update();
         }
 
         {
-            // set up chunk layer
-            let mut entity_mut = scenario.app.world.entity_mut(scenario.layer);
-            let mut layer = entity_mut.get_mut::<ChunkLayer>().unwrap();
-            layer.insert_chunk([0, 0], UnloadedChunk::new());
-            layer.set_block(
-                BlockPos::new(0, 0, 0),
-                BlockState::from_kind(BlockKind::GrassBlock),
-            );
-        }
+            let layer = scenario.layer();
+            for direction in [
+                Direction::Up,
+                Direction::Down,
+                Direction::South,
+                Direction::North,
+                Direction::East,
+                Direction::West,
+            ] {
+                let target_block_pos = BlockPos::new(0, 0, 0).get_in_direction(direction);
+                let block = layer
+                    .block(target_block_pos)
+                    .expect(format!("block at {:?} is None", target_block_pos).as_str());
+                let expected_axis = match direction {
+                    Direction::Down | Direction::Up => PropValue::Y,
+                    Direction::North | Direction::South => PropValue::Z,
+                    Direction::West | Direction::East => PropValue::X,
+                };
+                assert_eq!(
+                    BlockState::from_kind(BlockKind::OakLog).set(PropName::Axis, expected_axis),
+                    block.state,
+                    "block in direction {:?}",
+                    direction,
+                );
+            }
 
-        // place a block
-        scenario.app.world.send_event(InteractBlockEvent {
-            client: scenario.client,
-            hand: Hand::Main,
-            position: BlockPos::new(0, 0, 0),
-            face: Direction::Up,
-            cursor_pos: Vec3::new(0.5, 1.0, 0.5),
-            head_inside_block: false,
-            sequence: 0,
-        });
-
-        scenario.app.update();
-
-        {
-            let layer_entity = scenario.app.world.entity(scenario.layer);
-            let layer = layer_entity.get::<ChunkLayer>().unwrap();
-            let block = layer.block(BlockPos::new(0, 1, 0));
-            assert_eq!(
-                BlockState::from_kind(BlockKind::OakPlanks),
-                block.unwrap().state,
-            );
-
-            let client_entity = scenario.app.world.entity(scenario.client);
+            let client_entity = scenario.world.entity(scenario.client_entity());
             let stack = client_entity
                 .get::<Inventory>()
                 .unwrap()
                 .slot(INVENTORY_SLOT);
-            assert_eq!(stack.item, ItemKind::OakPlanks);
-            assert_eq!(stack.count, 1);
-            assert_eq!(stack.nbt, None);
+            assert!(stack.is_empty());
         };
     }
 
+    struct PlaceBlockScenarioEnvironment<T: TestableEnvironment = ScenarioSingleClient> {
+        env: T,
+    }
+
+    impl<T: TestableEnvironment> TestableEnvironment for PlaceBlockScenarioEnvironment<T> {
+        fn new() -> Self {
+            Self {
+                env: {
+                    let mut inner = T::new();
+                    inner.app().add_systems(Update, place_block);
+                    inner.app().update();
+                    inner
+                },
+            }
+        }
+
+        fn app(&mut self) -> &mut App {
+            self.env.app()
+        }
+
+        fn layer(&self) -> Entity {
+            self.env.layer()
+        }
+
+        fn client(&self) -> Entity {
+            self.env.client()
+        }
+    }
+
     #[test]
-    fn test_place_block_with_axis() {}
+    fn test_place_block_simple() {
+        eval_script::<PlaceBlockScenarioEnvironment>(
+            r#"
+            set gamemode survival
+            set inventory slot 37 item oak_planks count 2
+            set held_item 37
+            
+            assert position 0 0 0 block grass_block
+            
+            interact position 0 0 0 face up
+            
+            assert position 0 1 0 block oak_planks
+            assert inventory slot 37 item oak_planks count 1
+            assert inventory slot 36 empty
+            "#,
+        );
+    }
 }

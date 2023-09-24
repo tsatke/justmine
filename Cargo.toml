@@ -5,6 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = [
+    "test_script",
+]
+
+[dev-dependencies]
+test_script = { path = "./test_script" }
+
 [dependencies]
 bevy_ecs = "0.11.2"
 bevy_log = "0.11.2"
