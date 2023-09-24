@@ -137,3 +137,75 @@ pub fn place_block(
 fn is_door(block: BlockState) -> bool {
     block.to_kind().to_str().contains("door")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use valence::testing::ScenarioSingleClient;
+
+    #[test]
+    fn test_place_block_simple() {
+        const INVENTORY_SLOT: u16 = 36;
+
+        let mut scenario = ScenarioSingleClient::new();
+        scenario.app.add_systems(Update, place_block);
+        scenario.app.update();
+
+        {
+            // set up entity
+            let mut entity_mut = scenario.app.world.entity_mut(scenario.client);
+            *entity_mut.get_mut::<GameMode>().unwrap() = GameMode::Survival;
+            entity_mut.get_mut::<HeldItem>().unwrap().set_slot(36);
+            entity_mut
+                .get_mut::<Inventory>()
+                .unwrap()
+                .set_slot(INVENTORY_SLOT, ItemStack::new(ItemKind::OakPlanks, 2, None));
+        }
+
+        {
+            // set up chunk layer
+            let mut entity_mut = scenario.app.world.entity_mut(scenario.layer);
+            let mut layer = entity_mut.get_mut::<ChunkLayer>().unwrap();
+            layer.insert_chunk([0, 0], UnloadedChunk::new());
+            layer.set_block(
+                BlockPos::new(0, 0, 0),
+                BlockState::from_kind(BlockKind::GrassBlock),
+            );
+        }
+
+        // place a block
+        scenario.app.world.send_event(InteractBlockEvent {
+            client: scenario.client,
+            hand: Hand::Main,
+            position: BlockPos::new(0, 0, 0),
+            face: Direction::Up,
+            cursor_pos: Vec3::new(0.5, 1.0, 0.5),
+            head_inside_block: false,
+            sequence: 0,
+        });
+
+        scenario.app.update();
+
+        {
+            let layer_entity = scenario.app.world.entity(scenario.layer);
+            let layer = layer_entity.get::<ChunkLayer>().unwrap();
+            let block = layer.block(BlockPos::new(0, 1, 0));
+            assert_eq!(
+                BlockState::from_kind(BlockKind::OakPlanks),
+                block.unwrap().state,
+            );
+
+            let client_entity = scenario.app.world.entity(scenario.client);
+            let stack = client_entity
+                .get::<Inventory>()
+                .unwrap()
+                .slot(INVENTORY_SLOT);
+            assert_eq!(stack.item, ItemKind::OakPlanks);
+            assert_eq!(stack.count, 1);
+            assert_eq!(stack.nbt, None);
+        };
+    }
+
+    #[test]
+    fn test_place_block_with_axis() {}
+}
